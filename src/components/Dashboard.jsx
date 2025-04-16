@@ -39,7 +39,7 @@ const Dashboard = () => {
   const [endDate, setEndDate] = useState('');
   const [repositories, setRepositories] = useState([]);
   const [selectedRepository, setSelectedRepository] = useState('all');
-  const [org] = useState('pratiksha28058'); // Your organization name
+  const [org] = useState('pratiksha28058-1'); // Your organization name
   const [selectedRepo, setSelectedRepo] = useState('');
   const [secretScanningData, setSecretScanningData] = useState([]);
   const [reopenedAlertsData, setReopenedAlertsData] = useState([]);
