@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fetchRepositories, fetchSecurityAlerts,  fetchSecretScanningAlerts  } from '../GithubService';
+import { fetchRepositories, fetchSecurityAlerts,  fetchSecretScanningAlerts  } from '@/GithubService.jsx';
 import {
   LineChart,
   BarChart,
@@ -26,7 +26,7 @@ import { formatInTimeZone } from "date-fns-tz";
 //import { CodeValidationChart } from "./ui/CodeValidationChart";
 // src/Dashboard.jsx
 // import CodeValidationChart from './ui/CodeValidationChart';
-import CodeValidationChart from './ui/CodeValidationChart'; // Adjust the path as needed
+import CodeValidationChart from '@/ui/CodeValidationChart'; // Adjust the path as needed
 
 
 
