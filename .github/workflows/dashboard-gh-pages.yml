@@ -25,12 +25,12 @@ jobs:
           node-version: 18
 
       - name: Install Dependencies
-        run: npm install
+        run: |
+             npm install
+             npm uninstall date-fns date-fns-tz
 
       - name: Build Project
-        run: |
-             npm run build
-             npm install date-fns@2.29.3 date-fns-tz@1.3.7
+        run: npm run build
        
     
 
