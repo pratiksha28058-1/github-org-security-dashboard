@@ -1,9 +1,5 @@
 import React, { useEffect, useState } from "react";
-//import GithubService from '@/GithubService.jsx';
-
-// import { fetchRepositories, fetchSecurityAlerts } from '@/GithubService.jsx';
-// import React, { useEffect, useState } from "react";
-import { fetchRepositories, fetchSecurityAlerts  } from '@/GithubService.jsx';
+import { fetchRepositories, fetchSecurityAlerts,  fetchSecretScanningAlerts  } from '../GithubService';
 import {
   LineChart,
   BarChart,
@@ -19,11 +15,18 @@ import {
   Pie,
   Cell,
   AreaChart,
-  Area
+  Area,
+  ComposedChart
 } from 'recharts';
 
 import { format, parseISO } from "date-fns";
-
+import { Card, CardContent } from "./ui/card";
+import { Separator } from "./ui/separator";
+import { formatInTimeZone } from "date-fns-tz";
+//import { CodeValidationChart } from "./ui/CodeValidationChart";
+// src/Dashboard.jsx
+// import CodeValidationChart from './ui/CodeValidationChart';
+import CodeValidationChart from './ui/CodeValidationChart'; // Adjust the path as needed
 
 
 
@@ -46,6 +49,14 @@ const Dashboard = () => {
   const [costData, setCostData] = useState([]);
   const [fixedChartData, setFixedChartData] = useState([]);
   const [reopenedChartData, setReopenedChartData] = useState([]);
+  const [dismissedData, setdismissedChartData] = useState([]);
+  const [dismissedChartData, setDismissedChartData] = useState([]);
+  // const [CodeValidationChart, setCodeValidationChart] = useState([]); // Add this line
+  const [codeValidationData, setCodeValidationData] = useState([]);
+  const [alertsData, setAlertsData] = useState([]);
+
+  const [repo] = useState('Employee1');
+
 
 
   // Fetch repositories
@@ -128,19 +139,6 @@ useEffect(() => {
   
   
   
-  useEffect(() => {
-    async function getAlerts() {
-      const data = await fetchSecurityAlerts();
-      //const aggregatedData = aggregateAlertsByDateAndSeverity(data);
-      const aggregatedData = aggregateOpenAlertsByDateAndSeverity(filteredAlerts);
-      console.log("GitHub Security Alerts:", data);
-      setAlerts(data);
-      setFilteredAlerts(data);
-      setChartData(aggregatedData);
-    }
-    
-    getAlerts();
-  }, [filteredAlerts]);
 
 
   useEffect(() => {
@@ -166,48 +164,56 @@ useEffect(() => {
         timestamp: new Date(dateStr).getTime(),
         open: 0,
         dismissed: 0,
+        dismissed_false_positive: 0,
+        dismissed_wont_fix: 0,
+        dismissed_used_in_tests: 0,
         fixed: 0,
       };
     }
   
-    // Populate buckets
-    alerts.forEach(alert => {
-      const created = new Date(alert.created_at);
-      const end = alert.dismissed_at
-        ? new Date(alert.dismissed_at)
-        : alert.fixed_at
-        ? new Date(alert.fixed_at)
-        : today;
-      const state = alert.state;
-  
-      for (let d = new Date(created); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
-        if (!dateMap[dateStr]) continue;
-  
-        if (state === 'open') {
-          dateMap[dateStr].open += 1;
-        } else if (state === 'dismissed') {
-          dateMap[dateStr].dismissed += 1;
-        } else if (state === 'fixed') {
-          dateMap[dateStr].fixed += 1;
+  // Populate buckets
+  alerts.forEach(alert => {
+    const created = new Date(alert.created_at);
+    const end = alert.dismissed_at
+      ? new Date(alert.dismissed_at)
+      : alert.fixed_at
+      ? new Date(alert.fixed_at)
+      : today;
+    const state = alert.state;
+    const reason = alert.dismissed_reason;
+
+    for (let d = new Date(created); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      if (!dateMap[dateStr]) continue;
+
+      if (state === 'open') {
+        dateMap[dateStr].open += 1;
+      } else if (state === 'dismissed') {
+        if (reason === 'false positive') {
+          dateMap[dateStr].dismissed_false_positive += 1;
+        } else if (reason === "won't fix") {
+          dateMap[dateStr].dismissed_wont_fix += 1;
+        } else if (reason === 'used in tests') {
+          dateMap[dateStr].dismissed_used_in_tests += 1;
         }
+      } else if (state === 'fixed') {
+        dateMap[dateStr].fixed += 1;
       }
-    });
+    }
+  });
+
+  return Object.values(dateMap).sort((a, b) => a.timestamp - b.timestamp);
+};
+
   
-    return Object.values(dateMap).sort((a, b) => a.timestamp - b.timestamp);
-  };
-  
+   
+
+
 
   useEffect(() => {
     const dailyTrendData = aggregateDailyAlertTrends(filteredAlerts);
     setChartData(dailyTrendData);
   }, [filteredAlerts]);
-  
-
-  // useEffect(() => {
-  //   const aggregatedData = aggregateAlertsByDateSeverityAndState(filteredAlerts);
-  //   setChartData(aggregatedData);
-  // }, [filteredAlerts]);
   
 
 
@@ -251,7 +257,7 @@ useEffect(() => {
 
 
 
- // Count all open severity alerts
+// Count all open severity alerts
 const openAlertsCount = filteredAlerts.filter(
   (alert) => alert.state === 'open'
 ).length;
@@ -261,8 +267,8 @@ const openAlertsCount = filteredAlerts.filter(
     (alert) => alert.state === 'open' && alert.rule?.severity === 'error'
   ).length;
 
- // Count all open warning severity alerts
- const openWarningCount = filteredAlerts.filter(
+// Count all open warning severity alerts
+const openWarningCount = filteredAlerts.filter(
   (alert) => alert.state === 'open'  && alert.rule?.severity === 'warning'
 ).length;
 
@@ -318,10 +324,10 @@ const closedErrorCounts = closedErrorAlerts.reduce((acc, alert) => {
   }, {});
 
   //Convert counts to chart data
-   const chartData1 = Object.keys(severityCounts).map((severity) => ({
-     name: severity,
-     count: severityCounts[severity],
-   }));
+  const chartData1 = Object.keys(severityCounts).map((severity) => ({
+    name: severity,
+    count: severityCounts[severity],
+  }));
 
   // Filter alerts based on selected filters
   useEffect(() => {
@@ -347,18 +353,20 @@ const closedErrorCounts = closedErrorAlerts.reduce((acc, alert) => {
   const aggregateFixedAlerts = (alerts) => {
     const fixedAlerts = alerts.filter(alert => alert.fixed_at);
   
-    const counts = fixedAlerts.reduce((acc, alert) => {
-      const date = alert.fixed_at .split("T")[0]; // Only date part
-      if (!acc[date]) {
-        acc[date] = {
-          date,
-          timestamp: new Date(date).getTime(),
+    const counts = {};
+  
+    fixedAlerts.forEach(alert => {
+      const timestamp = new Date(alert.fixed_at).getTime();
+  
+      if (!counts[timestamp]) {
+        counts[timestamp] = {
+          timestamp,
           count: 0,
         };
       }
-      acc[date].count += 1;
-      return acc;
-    }, {});
+  
+      counts[timestamp].count += 1;
+    });
   
     return Object.values(counts).sort((a, b) => a.timestamp - b.timestamp);
   };
@@ -370,6 +378,9 @@ useEffect(() => {
   const fixedData = aggregateFixedAlerts(filteredAlerts);
   setFixedChartData(fixedData);
 }, [filteredAlerts]);
+
+
+
 
 
 // Reopen Alerts
@@ -399,6 +410,73 @@ useEffect(() => {
 const reopenedData  = aggregateReopenedAlerts (filteredAlerts);
 setReopenedChartData(reopenedData);
 }, [filteredAlerts]);
+
+
+
+//Code Validation 
+
+const aggregateValidationChartData = (alerts) => {
+  const counts = {};
+
+  alerts.forEach((alert) => {
+    const createdDate = alert.created_at.split("T")[0];
+    const fixedDate = alert.fixed_at ? alert.fixed_at.split("T")[0] : null;
+    const dismissed = alert.state === "dismissed";
+
+    if (!counts[createdDate]) {
+      counts[createdDate] = {
+        date: createdDate,
+        newlyOpened: 0,
+        fixed: 0,
+        dismissed: 0,
+        allOpen: 0,
+      };
+    }
+    counts[createdDate].newlyOpened += 1;
+    if (dismissed) counts[createdDate].dismissed += 1;
+    if (alert.state === "open") counts[createdDate].allOpen += 1;
+
+    if (fixedDate && fixedDate !== createdDate) {
+      if (!counts[fixedDate]) {
+        counts[fixedDate] = {
+          date: fixedDate,
+          newlyOpened: 0,
+          fixed: 0,
+          dismissed: 0,
+          allOpen: 0,
+        };
+      }
+      counts[fixedDate].fixed += 1;
+      if (dismissed) counts[fixedDate].dismissed += 1;
+    }
+  });
+
+  return Object.values(counts).sort((a, b) => new Date(a.date) - new Date(b.date));
+};
+
+const aggregateAlertsChartData = (alerts) => {
+  // Implement this function based on your alerts data structure
+  // Similar to aggregateValidationChartData
+};
+
+// const Dashboard = () => {
+//   const [org] = useState('pratiksha28058-1');
+//   const [repo] = useState('Employee1');
+  // const [codeValidationData, setCodeValidationData] = useState([]);
+  // const [alertsData, setAlertsData] = useState([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const validationAlerts = await fetchSecurityAlerts(org, selectedRepo);
+      const validationData = aggregateValidationChartData(validationAlerts);
+      setCodeValidationData(validationData);
+
+      const alerts = await fetchAlerts(org, repo);
+      const alertsChartData = aggregateAlertsChartData(alerts);
+      setAlertsData(alertsChartData);
+    };
+    loadData();
+  }, [org, selectedRepo]);
 
 
 
@@ -443,7 +521,7 @@ setReopenedChartData(reopenedData);
   </div>
 
 
- <div style={{
+<div style={{
     backgroundColor: '#8CC152',
     border: '1px solidrgb(224, 255, 24)',
     padding: '1rem',
@@ -532,61 +610,178 @@ setReopenedChartData(reopenedData);
 
 <h2>Detection</h2>
 
-      <h4>All Alerts Over Time</h4>
+
+
+
+<div style={{ display: 'flex', gap: '2rem', marginBottom: '2rem' }}>
+{/* Chart 1:ts Open vs Fixed Aler */}
+<div style={{ flex: 1 }}>
+  <h3>Opened vs Fixed Alerts Over Time</h3>
+  <ResponsiveContainer width="100%" height={300}>
+    <AreaChart data={chartData}>
+      <CartesianGrid strokeDasharray="3 3" />
+      {/* <XAxis dataKey="timestamp" tickFormatter={formatXAxis} /> */}
+      <XAxis
+          dataKey="timestamp"
+          type="number"
+          domain={["auto", "auto"]}
+          tickFormatter={(tick) => format(new Date(tick), "MMM dd, yyyy HH:mm")}
+        />
+        <YAxis allowDecimals={false} />
+        <Tooltip
+          labelFormatter={(label) =>
+            format(new Date(label), "MMM dd, yyyy HH:mm")
+          }
+        />
+      <Legend />
+      <Area type="monotone" dataKey="open" stackId="1" stroke="#8884d8" fill="#8884d8" name="Opened Alerts" />
+      <Area type="monotone" dataKey="fixed" stackId="1" stroke="#82ca9d" fill="#82ca9d" name="Fixed Alerts" />
+    </AreaChart>
+  </ResponsiveContainer>
+</div>
+
+{/* Chart 2: Dismissed Alerts by Reason */}
+<div style={{ flex: 1 }}>
+  <h3>Dismissed Alerts Over Time</h3>
+  <ResponsiveContainer width="100%" height={300}>
+<AreaChart data={chartData}>
+  <CartesianGrid strokeDasharray="3 3" />
+  <XAxis
+          dataKey="timestamp"
+          type="number"
+          domain={["auto", "auto"]}
+          tickFormatter={(tick) => format(new Date(tick), "MMM dd, yyyy HH:mm")}
+        />
+        <YAxis allowDecimals={false} />
+        <Tooltip
+          labelFormatter={(label) =>
+            format(new Date(label), "MMM dd, yyyy HH:mm")
+          }
+        />
+  <Legend />
+  <Area
+    type="monotone"
+    dataKey="dismissed_false_positive"
+    stackId="1"
+    stroke="#8884d8"
+    fill="#8884d8"
+    name="False Positive"
+  />
+  <Area
+    type="monotone"
+    dataKey="dismissed_wont_fix"
+    stackId="1"
+    stroke="#82ca9d"
+    fill="#82ca9d"
+    name="Won't Fix"
+  />
+  <Area
+    type="monotone"
+    dataKey="dismissed_used_in_tests"
+    stackId="1"
+    stroke="#ffc658"
+    fill="#ffc658"
+    name="Used in Tests"
+  />
+  {/* <Area
+    type="monotone"
+    dataKey="fixed"
+    stackId="1"
+    stroke="#ff7300"
+    fill="#ff7300"
+    name="Fixed"
+  /> */}
+  {/* <Area
+    type="monotone"
+    dataKey="open"
+    stackId="1"
+    stroke="#387908"
+    fill="#387908"
+    name="Open"
+  /> */}
+</AreaChart>
+</ResponsiveContainer>
+
+</div>
+</div>
+
+    <div>
+      <h2>Code Validation Alerts Chart</h2>
+      <CodeValidationChart data={codeValidationData} />
+      
+
+    </div>
+
+      <h2>All Alerts Over Time</h2>
       <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={chartData}>
-          <XAxis
-            dataKey="timestamp"
-            type="number"
-            domain={["auto", "auto"]}
-            tickFormatter={(tick) => format(new Date(tick), "MMM dd, yyyy HH:mm")}
-          />
-          <YAxis />
-          <Tooltip
-            labelFormatter={(label) => format(new Date(label), "MMM dd, yyyy HH:mm")}
-          />
-          <Legend />
-          <Line type="monotone" dataKey="open" stroke="#FF0000" name="Open Total" />
-          <Line type="monotone" dataKey="dismissed" stroke="#00AA00" name="Dismissed Total" />
-          <Line type="monotone" dataKey="fixed" stroke="#0000FF" name="Fixed Total" />
-        </LineChart>
+  <LineChart data={chartData}>
+    <XAxis
+      dataKey="timestamp"
+      type="number"
+      domain={["auto", "auto"]}
+      tickFormatter={(tick) => format(new Date(tick), "MMM dd, yyyy HH:mm")}
+    />
+    <YAxis allowDecimals={false} />
+    <Tooltip
+      labelFormatter={(label) => format(new Date(label), "MMM dd, yyyy HH:mm")}
+    />
+    <Legend />
+    <Line type="monotone" dataKey="open" stroke="#FF0000" name="Open Total" />
+    <Line type="monotone" dataKey="dismissed" stroke="#00AA00" name="Dismissed Total" />
+    <Line type="monotone" dataKey="fixed" stroke="#0000FF" name="Fixed Total" />
+  </LineChart>
       </ResponsiveContainer>
 
 
-      <h4>ReOpened Alerts Over Time</h4>
+
+      <h2>ReOpened Alerts Over Time</h2>
       <ResponsiveContainer width="100%" height={300}>
-  <AreaChart data={reopenedChartData}>
-    <XAxis
-      dataKey="timestamp"
-      type="number"
-      domain={['auto', 'auto']}
-      tickFormatter={(tick) => format(new Date(tick), "MMM dd, yyyy HH:mm")}
-    />
-    <YAxis />
-    <Tooltip labelFormatter={(label) => format(new Date(label), "MMM dd, yyyy HH:mm")} />
-    <Area dataKey="count" fill="#0000FF" name="ReOpened Alerts" />
-  </AreaChart>
-</ResponsiveContainer>
+      <AreaChart data={reopenedChartData}>
+      <XAxis
+          dataKey="timestamp"
+          type="number"
+          domain={["auto", "auto"]}
+          tickFormatter={(tick) => format(new Date(tick), "MMM dd, yyyy HH:mm")}
+        />
+        <YAxis allowDecimals={false} />
+        <Tooltip
+          labelFormatter={(label) =>
+            format(new Date(label), "MMM dd, yyyy HH:mm")
+          }
+        />
+        <Area dataKey="count" fill="#0000FF" name="ReOpened 1 Alerts" />
+      </AreaChart>
+      </ResponsiveContainer>
 
-
-
-     
 
 <h2>Remediation </h2>
 <h4>Fixed Alerts Over Time</h4>
-<ResponsiveContainer width="100%" height={300}>
-  <AreaChart data={fixedChartData}>
-    <XAxis
-      dataKey="timestamp"
-      type="number"
-      domain={['auto', 'auto']}
-      tickFormatter={(tick) => format(new Date(tick), "MMM dd, yyyy HH:mm")}
-    />
-    <YAxis />
-    <Tooltip labelFormatter={(label) => format(new Date(label), "MMM dd, yyyy HH:mm")} />
-    <Area dataKey="count" fill="#0000FF" name="Fixed Alerts" />
-  </AreaChart>
-</ResponsiveContainer>
+<div style={{ width: "100%", height: 350 }}>
+      <h2>Fixed Alerts Over Time</h2>
+      <ResponsiveContainer width="100%" height={300}>
+      <AreaChart data={aggregateFixedAlerts(filteredAlerts)}>
+        <XAxis
+          dataKey="timestamp"
+          type="number"
+          domain={["auto", "auto"]}
+          tickFormatter={(tick) => format(new Date(tick), "MMM dd, yyyy HH:mm")}
+        />
+        <YAxis allowDecimals={false} />
+        <Tooltip
+          labelFormatter={(label) =>
+            format(new Date(label), "MMM dd, yyyy HH:mm")
+          }
+        />
+        <Area
+          type="monotone"
+          dataKey="count"
+          stroke="#8884d8"
+          fill="#8884d8"
+          name="Fixed Alerts"
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+    </div>
 
 
 
@@ -596,12 +791,6 @@ setReopenedChartData(reopenedData);
 
 <h4>Time to Fix</h4>
 Analyzes the average duration taken to remediate alerts, helping assess the efficiency of your response processes
-
-
-
-<h4>Dismissed Alert</h4>
-Counts the alerts that have been dismissed, providing insight into potential false positives or accepted risks
-
 
 
 <h2>Prevention </h2>
@@ -657,6 +846,7 @@ Displays the number of vulnerabilities that were detected and prevented before m
 )}
 
       
+  
       
 
     </div>
