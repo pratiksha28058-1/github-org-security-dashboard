@@ -26,7 +26,7 @@ import { formatInTimeZone } from "date-fns-tz";
 //import { CodeValidationChart } from "./ui/CodeValidationChart";
 // src/Dashboard.jsx
 // import CodeValidationChart from './ui/CodeValidationChart';
-import CodeValidationChart from '@/ui/CodeValidationChart'; // Adjust the path as needed
+import CodeValidationChart from '@/components/ui/CodeValidationChart'; // Adjust the path as needed
 
 
 
